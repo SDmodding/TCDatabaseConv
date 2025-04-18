@@ -25,7 +25,7 @@ public:
 	TextureOverrideParams* mTextureOverrideParams;
 
 	char* mStrBuffer;
-	u32 mStrLen;
+	u32 mStrLen = 0;
 
 	u32 mComponentTypeSymbolUC = 0;
 
