@@ -6,13 +6,25 @@ using namespace UFG;
 class TCDatabaseConverter
 {
 public:
+	enum EVersion
+	{
+		VERSION_SDHD,
+		VERSION_TW
+	};
+
 	TrueCrowdDataBase* mDB;
+	EVersion mVersion;
 	SimpleXML::XMLWriter* mXMLW;
 
 	std::set<u32> mUnresolvedSymbols;
 
-	TCDatabaseConverter(TrueCrowdDataBase* db, const char* filename) : mDB(db)
+	TCDatabaseConverter(TrueCrowdDataBase* db, const char* filename) : mDB(db), mVersion(VERSION_SDHD)
 	{
+		auto definition = &db->mDefinition;
+		if (definition->mComponentCount > 25) {
+			mVersion = VERSION_TW;
+		}
+
 		mXMLW = SimpleXML::XMLWriter::Create(filename, 0, 0x8000);
 	}
 
@@ -39,6 +51,42 @@ public:
 
 	qString FormatUID(u32 uid) { return { "0x%X", uid }; }
 
+	TrueCrowdDefinition::Entity* GetEntities(u32& entityCount)
+	{
+		auto definition = &mDB->mDefinition;
+
+		if (mVersion == VERSION_TW) {
+			definition = reinterpret_cast<TrueCrowdDefinition*>(reinterpret_cast<uptr>(definition) + 0xFC);
+		}
+
+		entityCount = definition->mEntityCount;
+		return definition->mEntities;
+	}
+
+	qSymbol* GetTags(u32& numTags)
+	{
+		auto definition = &mDB->mDefinition;
+
+		if (mVersion == VERSION_TW) {
+			definition = reinterpret_cast<TrueCrowdDefinition*>(reinterpret_cast<uptr>(definition) + 0x2450);
+		}
+
+		numTags = definition->mNumTags;
+		return definition->mTagList.Get();
+	}
+
+	TrueCrowdDataBase::ComponentEntries* GetComponentEntries(u32& numComponentEntries)
+	{
+		auto db = mDB;
+
+		if (mVersion == VERSION_TW) {
+			db = reinterpret_cast<TrueCrowdDataBase*>(reinterpret_cast<uptr>(db) + 0x2450);
+		}
+
+		numComponentEntries = db->mNumComponentEntries;
+		return db->mComponentEntries.Get();
+	}
+
 	//------------------------------------
 	//	Tags
 	//------------------------------------
@@ -55,10 +103,10 @@ public:
 
 	void ExportTags(const BitFlags128& bitFlags)
 	{
-		auto definition = &mDB->mDefinition;
-		auto tag = definition->mTagList.Get();
+		u32 numTags;
+		auto tag = GetTags(numTags);
 
-		for (u32 i = 0; definition->mNumTags > i; ++i, ++tag)
+		for (u32 i = 0; numTags > i; ++i, ++tag)
 		{
 			if (!bitFlags.IsSet(i)) {
 				continue;
@@ -119,15 +167,18 @@ public:
 
 		// Entites
 
-		for (u32 i = 0; definition->mEntityCount > i; ++i) {
-			ExportEntity(&definition->mEntities[i]);
+		u32 entityCount;
+		auto entities = GetEntities(entityCount);
+		for (u32 i = 0; entityCount > i; ++i) {
+			ExportEntity(&entities[i]);
 		}
 
 		// Tags
 
 		mXMLW->BeginNode(XTag_Tags);
 
-		ExportTags(definition->mTagList.Get(), definition->mNumTags);
+		u32 numTags = 0;
+		ExportTags(GetTags(numTags), numTags);
 
 		mXMLW->EndNode(XTag_Tags);
 
@@ -296,7 +347,9 @@ public:
 
 		mXMLW->BeginNode(XTag_ComponentEntries);
 		{
-			ExportComponentEntries(mDB->mComponentEntries.Get(), mDB->mNumComponentEntries);
+			u32 numComponentEntries = 0;
+			auto componentEntries = GetComponentEntries(numComponentEntries);
+			ExportComponentEntries(GetComponentEntries(numComponentEntries), numComponentEntries);
 		}
 		mXMLW->EndNode(XTag_ComponentEntries);
 
