@@ -178,7 +178,8 @@ public:
 		mXMLW->BeginNode(XTag_Tags);
 
 		u32 numTags = 0;
-		ExportTags(GetTags(numTags), numTags);
+		auto tags = GetTags(numTags);
+		ExportTags(tags, numTags);
 
 		mXMLW->EndNode(XTag_Tags);
 
